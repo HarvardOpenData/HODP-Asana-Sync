@@ -2,11 +2,9 @@ function syncAsana() {
   var project = new AsanaProject(membersProjectsGid());
   project.getTasks();
   updateGoogleSheets(project.tasks);
-  emailOverdueMemberProjects(project);  
 }
 
-function emailAllOverdue() {
-  const filtered_project_gids = ["Member Projects"]
+/* function emailAllOverdue() {
   var projectsJson = JSON.parse(asanaFetch("projects?archived=false"));
   var projectsData = projectsJson["data"];
   var assignees = {};
@@ -46,6 +44,56 @@ function emailAllOverdue() {
       name: "Harvard Open Data Project"
     })
   }
+}*/
+
+function emailAllOverdue(){ 
+  var overdueTasks = getOverdueTasks();
+  var assignees = {};
+  overdueTasks.forEach(function(task){
+      if(task.dueDate){
+        var dueDate = Date.parse(task.dueDate);
+        var today = new Date();
+        if(today > dueDate && task.assigneeGid){
+          var assigneeEmail = task.getAssigneeEmail();
+          if(assigneeEmail){
+            if(!assignees[assigneeEmail]){
+              assignees[assigneeEmail] = [];
+            }
+            assignees[assigneeEmail].push({
+              taskTitle : task.title,
+              taskUrl : "https://app.asana.com/0/0/" + task.gid
+            });
+          }
+        }
+      }
+    });
+  for(var email in assignees){
+    var subject = "[Action Requested] You have HODP tasks overdue";
+    var content = "Hi,\n\n You are receiving this email because the following tasks are overdue in the HODP Asana: \n\n";
+    assignees[email].forEach(function(task){
+      content += "[" + task.taskTitle + "]: " + task.taskUrl + "\n";
+    });
+    content += "\nPlease either complete the tasks, change the due dates, or ask that the tasks be reassigned."
+    
+    MailApp.sendEmail(email, subject, content, {
+      name: "Harvard Open Data Project"
+    })
+  }
+}
+
+function getOverdueTasks() {
+  var dateString = Utilities.formatDate(new Date(), "GMT-5", "yyyy-MM-dd");
+  var tasksSearchUrl = "workspaces/971046034376905/tasks/search?completed=false&due_on.before=" + dateString;
+  var overdueTasksJson = JSON.parse(asanaFetch(tasksSearchUrl))
+  var overdueTasksData = overdueTasksJson["data"];
+  var overdueTasksGids = overdueTasksData.map(function(data) {return data.gid});
+  var overdueTasks = [];
+  overdueTasksGids.forEach(function(gid) {
+    var task = new AsanaTask(gid);
+    task.fill();
+    overdueTasks.push(task);
+  });
+  return overdueTasks;
 }
 
 function emailOverdueMemberProjects(project) {
